@@ -28,7 +28,9 @@ DEBUG = True
 
 ALLOWED_HOSTS = ['*']  # Allow all hosts for development purposes
 
-
+CSRF_TRUSTED_ORIGINS = [
+    'https://lazr.onrender.com'
+]
 # Application definition
 
 
