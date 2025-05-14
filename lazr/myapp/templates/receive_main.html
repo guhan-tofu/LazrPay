@@ -61,7 +61,7 @@
 
         async function loadPendingTransactions() {
             try {
-                const res = await fetch(`http://127.0.0.1:8000/transaction/by_email/${userEmail}/`);
+                const res = await fetch(`https://lazr.onrender.com/transaction/by_email/${userEmail}/`);
                 const transactions = await res.json();
                 const container = document.getElementById("transaction-list");
                 container.innerHTML = ""; // Clear loading text
