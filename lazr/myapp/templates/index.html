@@ -92,16 +92,29 @@
   const amountInput = document.getElementById('amount');
   console.log("Amount input:", parseFloat(amountInput.value));
 
+  // Updated to support both browser extension and mobile app
   function getProvider() {
-    return window?.phantom?.solana || window?.solana || null;
+    // Check for browser extension
+    if (window?.phantom?.solana || window?.solana) {
+      return window?.phantom?.solana || window?.solana;
+    }
+    
+    // Check for mobile app connection
+    if ('phantom' in window) {
+      const provider = window.phantom;
+      if (provider?.solana?.isPhantom) {
+        return provider.solana;
+      }
+    }
+    
+    // No provider found
+    return null;
   }
-
-
       
   async function getSenderIdByUserId(userId) {
   try {
     const userId = window.userId;
-    const response = await fetch(`https://lazr.onrender.com/senderid/${userId}/`);
+    const response = await fetch(`http://127.0.0.1:8000/senderid/${userId}/`);
     if (!response.ok) {
       throw new Error("Failed to fetch sender ID");
     }
@@ -118,7 +131,7 @@
       // Update the wallet address for the current user
 
       const senderId = await getSenderIdByUserId(userId);
-      const response = await fetch(`https://lazr.onrender.com/sender/update-wallet/${senderId}/`, {
+      const response = await fetch(`http://127.0.0.1:8000/sender/update-wallet/${senderId}/`, {
         method: "PUT",
         headers: { 
           "Content-Type": "application/json",
@@ -151,7 +164,7 @@
 
   async function createRecipient(email) {
     try {
-      const response = await fetch("https://lazr.onrender.com/recipient/create/", {
+      const response = await fetch("http://127.0.0.1:8000/recipient/create/", {
         method: "POST",
         headers: { "Content-Type": "application/json" , "X-CSRFToken": getCsrfToken() },
         body: JSON.stringify({ email }),
@@ -173,22 +186,36 @@
     }
   }
 
+  // Updated connectWallet function with mobile support
   async function connectWallet() {
     const provider = getProvider();
+    
     if (!provider) {
-      alert('No Solana wallet found.');
-      throw new Error('Provider not found');
+      // For mobile devices without browser extension, redirect to Phantom app
+      if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
+        // Encode current URL for return after connection
+        const dappURL = encodeURIComponent(window.location.href);
+        window.location.href = `https://phantom.app/ul/browse/${dappURL}`;
+        return; // User will return to the app after connecting
+      } else {
+        alert('No Solana wallet found. Please install Phantom wallet.');
+        throw new Error('Provider not found');
+      }
     }
+    
     if (!provider.publicKey) {
       await provider.connect();
     }
+    
     const publicKey = provider.publicKey.toString();
     walletAddressEl.textContent = `Connected: ${publicKey}`;
+    
     try {
       await updateSenderWallet(publicKey);
     } catch (err) {
       console.warn("Failed to update wallet address, continuing...");
     }
+    
     return provider;
   }
 
@@ -229,17 +256,17 @@
 
       await createRecipient(toEmail);
 
-      const senderRes = await fetch(`https://lazr.onrender.com/sender/by_wallet/${fromAddress}/`);
+      const senderRes = await fetch(`http://127.0.0.1:8000/sender/by_wallet/${fromAddress}/`);
       const senderData = await senderRes.json();
       const senderId = senderData.sender_id;
       console.log(`Sender ID: ${senderId}`);
 
-      const recipientRes = await fetch(`https://lazr.onrender.com/recipient/by_email/${toEmail}/`);
+      const recipientRes = await fetch(`http://127.0.0.1:8000/recipient/by_email/${toEmail}/`);
       const recipientData = await recipientRes.json();
       const recipientId = recipientData.recipient_id;
 
       const amountinSol = parseFloat(amountInput.value);
-      await fetch("https://lazr.onrender.com/transaction/create/", {
+      await fetch("http://127.0.0.1:8000/transaction/create/", {
         method: "POST",
         headers: { "Content-Type": "application/json" , "X-CSRFToken": getCsrfToken()  },
         body: JSON.stringify({
@@ -251,23 +278,50 @@
       });
 
       console.log("Transaction record created successfully.");
-      await fetch("https://lazr.onrender.com/email/send/", {
+      await fetch("http://127.0.0.1:8000/email/send/", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "X-CSRFToken": getCsrfToken() // Added CSRF token
+        },
         body: JSON.stringify({ email: toEmail }),
-     });
+      });
     } catch (err) {
       console.error("Error during transaction:", err);
       alert("Error: " + (err?.message || err));
     }
   }
 
+  // Check if returning from Phantom mobile app
+  document.addEventListener('DOMContentLoaded', function() {
+    if (window.location.hash.includes('phantom')) {
+      const hashParams = new URLSearchParams(window.location.hash.substring(1));
+      const publicKey = hashParams.get('publicKey');
+      
+      if (publicKey) {
+        walletAddressEl.textContent = `Connected: ${publicKey}`;
+        updateSenderWallet(publicKey).catch(err => {
+          console.warn("Failed to update wallet address on return:", err);
+        });
+      }
+    }
+  });
+
   sendButton.addEventListener('click', async () => {
     try {
       const provider = await connectWallet();
-      await buildAndSend(provider);
+      // Only proceed if provider exists (may be null on mobile redirect)
+      if (provider) {
+        await buildAndSend(provider);
+      }
     } catch (e) {
       console.error("Wallet connect/send failed:", e);
+      // More descriptive error for mobile users
+      if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
+        alert("Please make sure you have the Phantom wallet app installed.");
+      } else {
+        alert("Error: " + (e?.message || e));
+      }
     }
   });
 </script>
