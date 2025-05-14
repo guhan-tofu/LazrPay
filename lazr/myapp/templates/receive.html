@@ -93,7 +93,7 @@
         let claimed = false; // local flag
 
         async function loadTransaction() {
-            const res = await fetch(`http://127.0.0.1:8000/transaction/by_txid/${txHash}/`);
+            const res = await fetch(`https://lazr.onrender.com/transaction/by_txid/${txHash}/`);
             const data = await res.json();
 
             if (res.ok && data.status === "pending") {
@@ -113,11 +113,11 @@
             if (claimed) return;
 
             const wallet = document.getElementById('wallet').value;
-            const res2 = await fetch(`http://127.0.0.1:8000/transaction/by_txid/${txHash}/`);
+            const res2 = await fetch(`https://lazr.onrender.com/transaction/by_txid/${txHash}/`);
             const data = await res2.json();
             const amount = data.amount;
 
-            const res = await fetch('http://127.0.0.1:8000/sol/send/', {
+            const res = await fetch('https://lazr.onrender.com/sol/send/', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ tx_hash: txHash, recipient: wallet, amount: amount })
@@ -125,7 +125,7 @@
 
             const result = await res.json();
             if (res.ok) {
-                await fetch(`http://127.0.0.1:8000/update/status/${txHash}/`, {
+                await fetch(`https://lazr.onrender.com/update/status/${txHash}/`, {
                     method: 'PATCH',
                     headers: {
                         'Content-Type': 'application/json',
