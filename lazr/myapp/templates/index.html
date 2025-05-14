@@ -47,7 +47,8 @@
     <button id="sendButton" class="text-3xl px-6 py-3 bg-pink-600 text-white rounded-lg shadow-lg hover:bg-pink-800 transition disabled:opacity-50">
       SEND IT
     </button>
-    <p id="walletAddress" class="mt-4 text-lg font-mono break-all"></p>
+    <p id="walletStatus" class="mt-2 text-black font-bold"></p>
+    <p id="walletAddress" class="mt-2 text-lg font-mono break-all"></p>
     
     <div class="mt-6">
       <a href="{% url 'logout' %}" class="text-black underline">Logout</a>
@@ -85,57 +86,106 @@
   // Access user data from window object
   const userEmail = window.userEmail;
   const userId = window.userId;
-  // console.log("User ID:", userId);
   const sendButton = document.getElementById('sendButton');
   const walletAddressEl = document.getElementById('walletAddress');
+  const walletStatusEl = document.getElementById('walletStatus');
   const toInput = document.getElementById('to');
   const amountInput = document.getElementById('amount');
-  console.log("Amount input:", parseFloat(amountInput.value));
 
-  // Updated to support both browser extension and mobile app
-  function getProvider() {
-    // Check for browser extension
-    if (window?.phantom?.solana || window?.solana) {
-      return window?.phantom?.solana || window?.solana;
-    }
+  // Set initial wallet status
+  walletStatusEl.textContent = "Wallet not connected";
+  
+  // Store wallet state
+  let connectedProvider = null;
+  let connectedWalletAddress = null;
+
+  // Check for a successful phantom connection on page load
+  document.addEventListener('DOMContentLoaded', async function() {
+    // Check for phantom parameters in url
+    const urlParams = new URLSearchParams(window.location.search);
+    const phantomResponse = urlParams.get('phantom_encryption_public_key');
     
-    // Check for mobile app connection
-    if ('phantom' in window) {
-      const provider = window.phantom;
-      if (provider?.solana?.isPhantom) {
-        return provider.solana;
+    if (phantomResponse) {
+      walletStatusEl.textContent = "Processing connection from Phantom...";
+      try {
+        await checkExistingConnection();
+      } catch (err) {
+        console.error("Error checking connection on load:", err);
       }
+    } else {
+      await checkExistingConnection();
+    }
+  });
+
+  // Check if we already have a connection
+  async function checkExistingConnection() {
+    const provider = getProvider();
+    
+    if (provider) {
+      try {
+        // Check if already connected
+        if (provider.isConnected && provider.publicKey) {
+          connectedProvider = provider;
+          connectedWalletAddress = provider.publicKey.toString();
+          
+          walletStatusEl.textContent = "Connected";
+          walletAddressEl.textContent = `${connectedWalletAddress}`;
+          
+          // Update wallet address in database
+          try {
+            await updateSenderWallet(connectedWalletAddress);
+          } catch (err) {
+            console.warn("Failed to update wallet in database:", err);
+          }
+          
+          return true;
+        }
+      } catch (err) {
+        console.log("Not connected yet:", err);
+      }
+    } else {
+      console.log("No provider available");
     }
     
-    // No provider found
+    return false;
+  }
+
+  // Get provider function with improved detection
+  function getProvider() {
+    if (window?.phantom?.solana?.isPhantom) {
+      return window.phantom.solana;
+    }
+    
+    if (window?.solana?.isPhantom) {
+      return window.solana;
+    }
+    
     return null;
   }
       
   async function getSenderIdByUserId(userId) {
-  try {
-    const userId = window.userId;
-    const response = await fetch(`http://127.0.0.1:8000/senderid/${userId}/`);
-    if (!response.ok) {
-      throw new Error("Failed to fetch sender ID");
+    try {
+      const response = await fetch(`http://127.0.0.1:8000/senderid/${userId}/`);
+      if (!response.ok) {
+        throw new Error("Failed to fetch sender ID");
+      }
+      const data = await response.json();
+      return data.sender_id;
+    } catch (error) {
+      console.error("Error fetching sender ID:", error);
+      throw error;
     }
-    const data = await response.json();
-    return data.sender_id;
-  } catch (error) {
-    console.error("Error fetching sender ID:", error);
-    throw error;
   }
-}
 
   async function updateSenderWallet(publicKey) {
     try {
       // Update the wallet address for the current user
-
       const senderId = await getSenderIdByUserId(userId);
       const response = await fetch(`http://127.0.0.1:8000/sender/update-wallet/${senderId}/`, {
         method: "PUT",
         headers: { 
           "Content-Type": "application/json",
-          "X-CSRFToken": getCsrfToken() // Get CSRF token if needed
+          "X-CSRFToken": getCsrfToken()
         },
         body: JSON.stringify({ wallet_address: publicKey }),
       });
@@ -150,7 +200,7 @@
       return result;
     } catch (err) {
       console.error("Wallet update failed:", err.message);
-      throw err; // Re-throw to allow handling by the caller
+      throw err;
     }
   }
   
@@ -186,139 +236,191 @@
     }
   }
 
-  // Updated connectWallet function with mobile support
+  // Improved connectWallet function with proper mobile handling
   async function connectWallet() {
+    // Check if already connected first
+    if (await checkExistingConnection()) {
+      return connectedProvider;
+    }
+    
+    walletStatusEl.textContent = "Connecting...";
+    
     const provider = getProvider();
     
     if (!provider) {
-      // For mobile devices without browser extension, redirect to Phantom app
+      walletStatusEl.textContent = "No wallet found";
+      
+      // For mobile devices, create a deep link to Phantom
       if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
-        // Encode current URL for return after connection
-        const dappURL = encodeURIComponent(window.location.href);
-        window.location.href = `https://phantom.app/ul/browse/${dappURL}`;
-        return; // User will return to the app after connecting
+        const currentUrl = encodeURIComponent(window.location.href);
+        // Use proper Phantom deep link format
+        const deepLink = `https://phantom.app/ul/browse/${currentUrl}`;
+        
+        walletStatusEl.textContent = "Redirecting to Phantom...";
+        console.log("Redirecting to:", deepLink);
+        
+        // Allow status message to display before redirect
+        setTimeout(() => {
+          window.location.href = deepLink;
+        }, 500);
+        
+        return null;
       } else {
-        alert('No Solana wallet found. Please install Phantom wallet.');
+        alert('No Solana wallet found. Please install Phantom wallet extension.');
         throw new Error('Provider not found');
       }
     }
     
-    if (!provider.publicKey) {
-      await provider.connect();
-    }
-    
-    const publicKey = provider.publicKey.toString();
-    walletAddressEl.textContent = `Connected: ${publicKey}`;
-    
     try {
-      await updateSenderWallet(publicKey);
+      // Connect to the wallet
+      await provider.connect();
+      
+      const publicKey = provider.publicKey.toString();
+      
+      walletStatusEl.textContent = "Connected";
+      walletAddressEl.textContent = `${publicKey}`;
+      
+      connectedProvider = provider;
+      connectedWalletAddress = publicKey;
+      
+      // Update wallet in database
+      try {
+        await updateSenderWallet(publicKey);
+      } catch (err) {
+        console.warn("Failed to update wallet address, continuing...");
+      }
+      
+      return provider;
     } catch (err) {
-      console.warn("Failed to update wallet address, continuing...");
+      walletStatusEl.textContent = "Connection failed";
+      console.error("Wallet connection error:", err);
+      throw err;
     }
-    
-    return provider;
   }
 
   async function buildAndSend(provider) {
+    if (!provider) {
+      alert("Please connect your wallet first");
+      return;
+    }
+    
     if (!amountInput.checkValidity()) {
       amountInput.reportValidity();
       return;
     }
 
+    if (!toInput.checkValidity()) {
+      toInput.reportValidity();
+      return;
+    }
+
+    walletStatusEl.textContent = "Processing transaction...";
+    
     const connection = new Connection('https://api.devnet.solana.com', 'confirmed');
     const amount = parseFloat(amountInput.value);
     const lamports = Math.round(amount * LAMPORTS_PER_SOL);
     
-
     const toEmail = toInput.value.trim();
     const toPubkey = new PublicKey(DESTINATION_ADDRESS);
     const fromPubkey = provider.publicKey;
     const fromAddress = fromPubkey.toString();
 
-    const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
-
-    const transaction = new Transaction().add(
-      SystemProgram.transfer({
-        fromPubkey,
-        toPubkey,
-        lamports
-      })
-    );
-    transaction.feePayer = fromPubkey;
-    transaction.recentBlockhash = blockhash;
-
     try {
+      const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
+  
+      const transaction = new Transaction().add(
+        SystemProgram.transfer({
+          fromPubkey,
+          toPubkey,
+          lamports
+        })
+      );
+      transaction.feePayer = fromPubkey;
+      transaction.recentBlockhash = blockhash;
+  
       const signed = await provider.signTransaction(transaction);
       const rawTx = signed.serialize();
+      
+      walletStatusEl.textContent = "Sending transaction...";
+      
       const txid = await connection.sendRawTransaction(rawTx);
+      
+      walletStatusEl.textContent = "Confirming transaction...";
+      
       await connection.confirmTransaction({ signature: txid, blockhash, lastValidBlockHeight }, 'confirmed');
+      
+      walletStatusEl.textContent = "Transaction successful!";
+      
       alert(`Success!\nTransaction ID: ${txid}`);
-
+  
+      // Create recipient record if needed
       await createRecipient(toEmail);
-
+  
+      // Get sender information
       const senderRes = await fetch(`http://127.0.0.1:8000/sender/by_wallet/${fromAddress}/`);
       const senderData = await senderRes.json();
       const senderId = senderData.sender_id;
       console.log(`Sender ID: ${senderId}`);
-
+  
+      // Get recipient information
       const recipientRes = await fetch(`http://127.0.0.1:8000/recipient/by_email/${toEmail}/`);
       const recipientData = await recipientRes.json();
       const recipientId = recipientData.recipient_id;
-
-      const amountinSol = parseFloat(amountInput.value);
+  
+      // Create transaction record
       await fetch("http://127.0.0.1:8000/transaction/create/", {
         method: "POST",
-        headers: { "Content-Type": "application/json" , "X-CSRFToken": getCsrfToken()  },
+        headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
         body: JSON.stringify({
           from_user: senderId,
           to_receiver: recipientId,
           tx_hash: txid,
-          amount: amountinSol,
+          amount: amount,
         }),
       });
-
+  
       console.log("Transaction record created successfully.");
+      
+      // Send notification email
       await fetch("http://127.0.0.1:8000/email/send/", {
         method: "POST",
         headers: { 
           "Content-Type": "application/json",
-          "X-CSRFToken": getCsrfToken() // Added CSRF token
+          "X-CSRFToken": getCsrfToken()
         },
         body: JSON.stringify({ email: toEmail }),
       });
+      
+      // Reset fields for next transaction
+      amountInput.value = "";
+      walletStatusEl.textContent = "Connected";
     } catch (err) {
       console.error("Error during transaction:", err);
+      walletStatusEl.textContent = "Transaction failed";
       alert("Error: " + (err?.message || err));
     }
   }
 
-  // Check if returning from Phantom mobile app
-  document.addEventListener('DOMContentLoaded', function() {
-    if (window.location.hash.includes('phantom')) {
-      const hashParams = new URLSearchParams(window.location.hash.substring(1));
-      const publicKey = hashParams.get('publicKey');
-      
-      if (publicKey) {
-        walletAddressEl.textContent = `Connected: ${publicKey}`;
-        updateSenderWallet(publicKey).catch(err => {
-          console.warn("Failed to update wallet address on return:", err);
-        });
-      }
-    }
-  });
-
+  // Handle send button click
   sendButton.addEventListener('click', async () => {
     try {
-      const provider = await connectWallet();
+      // Try to get existing connection or connect wallet
+      let provider = connectedProvider;
+      
+      if (!provider) {
+        provider = await connectWallet();
+      }
+      
       // Only proceed if provider exists (may be null on mobile redirect)
       if (provider) {
         await buildAndSend(provider);
       }
     } catch (e) {
       console.error("Wallet connect/send failed:", e);
-      // More descriptive error for mobile users
+      walletStatusEl.textContent = "Error connecting wallet";
+      
       if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
-        alert("Please make sure you have the Phantom wallet app installed.");
+        alert("Please make sure you have the Phantom wallet app installed and try again.");
       } else {
         alert("Error: " + (e?.message || e));
       }
