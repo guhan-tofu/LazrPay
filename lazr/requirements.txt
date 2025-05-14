@@ -1,4 +1,5 @@
 django
+requests
 solana==0.28
 solders
 djangorestframework
