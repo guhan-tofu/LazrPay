@@ -3,6 +3,7 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import smtplib
 import os
+from django.template.loader import render_to_string
 
 # Load variables from .env
 load_dotenv()
