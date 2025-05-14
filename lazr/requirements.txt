@@ -1,6 +1,7 @@
 django
 requests
 cryptography
+python-dotenv
 solana==0.28
 solders
 djangorestframework
