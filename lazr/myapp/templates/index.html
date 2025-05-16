@@ -218,7 +218,7 @@
   async function getSenderIdByUserId(userId) {
   try {
     const userId = window.userId;
-    const response = await fetch(`http://127.0.0.1:8000/senderid/${userId}/`);
+    const response = await fetch(`https://lazr.onrender.com/senderid/${userId}/`);
     if (!response.ok) {
       throw new Error("Failed to fetch sender ID");
     }
@@ -235,7 +235,7 @@
       // Update the wallet address for the current user
 
       const senderId = await getSenderIdByUserId(userId);
-      const response = await fetch(`http://127.0.0.1:8000/sender/update-wallet/${senderId}/`, {
+      const response = await fetch(`https://lazr.onrender.com/sender/update-wallet/${senderId}/`, {
         method: "PUT",
         headers: { 
           "Content-Type": "application/json",
@@ -268,7 +268,7 @@
 
   async function createRecipient(email) {
     try {
-      const response = await fetch("http://127.0.0.1:8000/recipient/create/", {
+      const response = await fetch("https://lazr.onrender.com/recipient/create/", {
         method: "POST",
         headers: { "Content-Type": "application/json" , "X-CSRFToken": getCsrfToken() },
         body: JSON.stringify({ email }),
@@ -346,17 +346,17 @@
 
       await createRecipient(toEmail);
 
-      const senderRes = await fetch(`http://127.0.0.1:8000/sender/by_wallet/${fromAddress}/`);
+      const senderRes = await fetch(`https://lazr.onrender.com/sender/by_wallet/${fromAddress}/`);
       const senderData = await senderRes.json();
       const senderId = senderData.sender_id;
       console.log(`Sender ID: ${senderId}`);
 
-      const recipientRes = await fetch(`http://127.0.0.1:8000/recipient/by_email/${toEmail}/`);
+      const recipientRes = await fetch(`https://lazr.onrender.com/recipient/by_email/${toEmail}/`);
       const recipientData = await recipientRes.json();
       const recipientId = recipientData.recipient_id;
 
       const amountinSol = parseFloat(amountInput.value);
-      await fetch("http://127.0.0.1:8000/transaction/create/", {
+      await fetch("https://lazr.onrender.com/transaction/create/", {
         method: "POST",
         headers: { "Content-Type": "application/json" , "X-CSRFToken": getCsrfToken()  },
         body: JSON.stringify({
@@ -368,7 +368,7 @@
       });
 
       console.log("Transaction record created successfully.");
-      await fetch("http://127.0.0.1:8000/email/send/", {
+      await fetch("https://lazr.onrender.com/email/send/", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: toEmail }),
