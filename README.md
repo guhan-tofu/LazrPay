@@ -1,5 +1,8 @@
 # LAZR PAY
 
+https://lazr.onrender.com
+
+
 ##  A Simpel Payment System Made in Solana
 
 
