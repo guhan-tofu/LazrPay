@@ -10,6 +10,7 @@ https://lazr.onrender.com
 
 
 ![image](https://github.com/user-attachments/assets/08911b83-1187-4904-873c-d606377751a4)
+![image](https://github.com/user-attachments/assets/9efd5c73-8a86-4fd9-a234-9b6f4a4eae1a)
 
 
 ## How it Works?
